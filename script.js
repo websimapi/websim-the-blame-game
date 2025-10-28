@@ -2,8 +2,8 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 
 const AI_SYSTEM_PROMPT = `You are the game master AI for 'The Blame Game'. Your role is to act as a cynical, dramatic narrator and judge. All your responses MUST be concise and under 255 characters.
-1.  **Initial Accusation:** When the game starts, you will invent a ridiculous, nonsensical, and trivial "crime" and accuse the current user of committing it. Be dramatic and over-the-top. Address them by their username.
-2.  **Ongoing Commentary:** After the initial accusation, you will analyze new comments. Your goal is to stir the pot. Summarize who is being blamed, point out patterns, and make sarcastic or funny remarks about the arguments. Identify the user who is currently taking the most heat. You must be concise.`;
+1.  **Initial Accusation:** When a user joins, you will invent a ridiculous, nonsensical, and trivial "crime" and accuse them of committing it. Be dramatic and over-the-top. Address them by their username.
+2.  **Ongoing Commentary:** When provided with recent comments, your goal is to stir the pot. Summarize who is being blamed, point out patterns, and make sarcastic or funny remarks about the arguments. Identify the user who is currently taking the most heat. You must be concise.`;
 
 const state = {
     currentUser: null,
@@ -38,15 +38,19 @@ async function updateAITerminal(prompt) {
                 { role: "system", content: AI_SYSTEM_PROMPT },
                 { role: "user", content: prompt }
             ],
-            max_tokens: 60, // Restrict token usage to encourage shorter responses
+            max_tokens: 80, // A little more room for creativity, still concise.
         });
         const content = completion.content;
+        elements.aiBox.innerHTML = '';
+        elements.aiBox.appendChild(elements.aiText);
         elements.aiText.textContent = content;
         speak(content);
         return content;
     } catch (error) {
         console.error("Error generating AI response:", error);
         const errorMessage = "AI circuits are overheating. Stand by for recalibration...";
+        elements.aiBox.innerHTML = '';
+        elements.aiBox.appendChild(elements.aiText);
         elements.aiText.textContent = errorMessage;
         return errorMessage;
     }
@@ -55,23 +59,17 @@ async function updateAITerminal(prompt) {
 
 async function generateInitialAccusation() {
     elements.aiBox.innerHTML = '<div class="loader"></div>';
-    const accusation = await updateAITerminal(`A user named "${state.currentUser.username}" has just joined. Accuse them of a new, absurd crime.`);
-    elements.aiBox.innerHTML = '';
-    elements.aiBox.appendChild(elements.aiText);
-    elements.aiText.textContent = accusation;
+    await updateAITerminal(`A user named "${state.currentUser.username}" has just joined. Accuse them of a new, absurd crime.`);
 }
 
 async function generateAICommentary() {
+    elements.aiBox.innerHTML = '<div class="loader"></div>';
     const commentsResponse = await fetch(`/api/v1/projects/${state.projectId}/comments?last=10`);
     const commentsData = await commentsResponse.json();
     const recentComments = commentsData.comments.data.map(c => `${c.comment.author.username}: ${c.comment.raw_content}`).join('\n');
     
-    if (!recentComments) {
-        const initialCommentary = "The void is silent. No one is casting blame. How peculiar.";
-        elements.aiText.textContent = initialCommentary;
-        speak(initialCommentary);
-        return;
-    }
+    // No need for a special message here, as this function will only be called if there are comments.
+    if (!recentComments) return;
 
     await updateAITerminal(`Here are the most recent comments in the game. Provide your commentary.\n\n${recentComments}`);
 }
@@ -102,10 +100,13 @@ async function loadComments() {
         const response = await fetch(`/api/v1/projects/${state.projectId}/comments`);
         const data = await response.json();
         elements.commentsList.innerHTML = '';
-        data.comments.data.reverse().forEach(renderComment);
+        const comments = data.comments.data;
+        comments.slice().reverse().forEach(renderComment);
+        return comments.length;
     } catch (error) {
         console.error("Error loading comments:", error);
         elements.commentsList.innerHTML = '<p>Could not load the evidence locker.</p>';
+        return 0;
     }
 }
 
@@ -162,9 +163,13 @@ async function init() {
         state.projectId = project.id;
         state.currentUser = user;
 
-        await generateInitialAccusation();
-        await loadComments();
-        await generateAICommentary(); // Initial commentary
+        const commentCount = await loadComments();
+
+        if (commentCount === 0) {
+            await generateInitialAccusation();
+        } else {
+            await generateAICommentary();
+        }
 
         elements.submitButton.addEventListener('click', handleSubmitComment);
         elements.ttsToggleButton.addEventListener('click', handleToggleMute);
