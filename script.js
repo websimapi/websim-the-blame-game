@@ -1,66 +1,79 @@
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 
-const AI_SYSTEM_PROMPT = `You are the game master AI for 'The Blame Game'. Your role is to act as a cynical, dramatic narrator and judge.
+const AI_SYSTEM_PROMPT = `You are the game master AI for 'The Blame Game'. Your role is to act as a cynical, dramatic narrator and judge. All your responses MUST be concise and under 255 characters.
 1.  **Initial Accusation:** When the game starts, you will invent a ridiculous, nonsensical, and trivial "crime" and accuse the current user of committing it. Be dramatic and over-the-top. Address them by their username.
 2.  **Ongoing Commentary:** After the initial accusation, you will analyze new comments. Your goal is to stir the pot. Summarize who is being blamed, point out patterns, and make sarcastic or funny remarks about the arguments. Identify the user who is currently taking the most heat. You must be concise.`;
 
 const state = {
     currentUser: null,
     projectId: null,
+    isMuted: false,
 };
 
 const elements = {
-    accusationText: document.getElementById('ai-accusation-text'),
-    accusationBox: document.getElementById('ai-accusation-box'),
-    commentaryText: document.getElementById('ai-commentary-text'),
+    aiText: document.getElementById('ai-text'),
+    aiBox: document.getElementById('ai-box'),
     commentsList: document.getElementById('comments-list'),
     commentInput: document.getElementById('comment-input'),
     submitButton: document.getElementById('submit-comment'),
     commentError: document.getElementById('comment-error'),
+    ttsToggleButton: document.getElementById('tts-toggle'),
 };
 
-async function generateInitialAccusation() {
-    elements.accusationBox.innerHTML = '<div class="loader"></div>';
-    try {
-        const completion = await websim.chat.completions.create({
-            messages: [
-                { role: "system", content: AI_SYSTEM_PROMPT },
-                { role: "user", content: `A user named "${state.currentUser.username}" has just joined. Accuse them of a new, absurd crime.` }
-            ],
-        });
-        elements.accusationText.textContent = completion.content;
-    } catch (error) {
-        console.error("Error generating AI accusation:", error);
-        elements.accusationText.textContent = "The AI's accusation circuits have shorted out. You're lucky... for now.";
-    } finally {
-        elements.accusationBox.innerHTML = '';
-        elements.accusationBox.appendChild(elements.accusationText);
+const audio = {
+    toggleSound: new Audio('tts_toggle_click.mp3')
+};
+
+function speak(text) {
+    if (!state.isMuted && text) {
+        websim.tts.speak({ text });
     }
 }
 
-async function generateAICommentary() {
+async function updateAITerminal(prompt) {
     try {
-        const commentsResponse = await fetch(`/api/v1/projects/${state.projectId}/comments?last=10`);
-        const commentsData = await commentsResponse.json();
-        const recentComments = commentsData.comments.data.map(c => `${c.comment.author.username}: ${c.comment.raw_content}`).join('\n');
-        
-        if (!recentComments) {
-            elements.commentaryText.textContent = "The void is silent. No one is casting blame. How peculiar.";
-            return;
-        }
-
         const completion = await websim.chat.completions.create({
             messages: [
                 { role: "system", content: AI_SYSTEM_PROMPT },
-                { role: "user", content: `Here are the most recent comments in the game. Provide your commentary.\n\n${recentComments}` }
+                { role: "user", content: prompt }
             ],
+            max_tokens: 60, // Restrict token usage to encourage shorter responses
         });
-        elements.commentaryText.textContent = completion.content;
+        const content = completion.content;
+        elements.aiText.textContent = content;
+        speak(content);
+        return content;
     } catch (error) {
-        console.error("Error generating AI commentary:", error);
-        elements.commentaryText.textContent = "The AI is struggling to process the sheer volume of blame...";
+        console.error("Error generating AI response:", error);
+        const errorMessage = "AI circuits are overheating. Stand by for recalibration...";
+        elements.aiText.textContent = errorMessage;
+        return errorMessage;
     }
+}
+
+
+async function generateInitialAccusation() {
+    elements.aiBox.innerHTML = '<div class="loader"></div>';
+    const accusation = await updateAITerminal(`A user named "${state.currentUser.username}" has just joined. Accuse them of a new, absurd crime.`);
+    elements.aiBox.innerHTML = '';
+    elements.aiBox.appendChild(elements.aiText);
+    elements.aiText.textContent = accusation;
+}
+
+async function generateAICommentary() {
+    const commentsResponse = await fetch(`/api/v1/projects/${state.projectId}/comments?last=10`);
+    const commentsData = await commentsResponse.json();
+    const recentComments = commentsData.comments.data.map(c => `${c.comment.author.username}: ${c.comment.raw_content}`).join('\n');
+    
+    if (!recentComments) {
+        const initialCommentary = "The void is silent. No one is casting blame. How peculiar.";
+        elements.aiText.textContent = initialCommentary;
+        speak(initialCommentary);
+        return;
+    }
+
+    await updateAITerminal(`Here are the most recent comments in the game. Provide your commentary.\n\n${recentComments}`);
 }
 
 function renderComment(commentData) {
@@ -129,6 +142,17 @@ function handleNewComment(event) {
     generateAICommentary();
 }
 
+function handleToggleMute() {
+    state.isMuted = !state.isMuted;
+    elements.ttsToggleButton.textContent = state.isMuted ? '🔇' : '🔊';
+    audio.toggleSound.play();
+    if (!state.isMuted) {
+       speak(elements.aiText.textContent);
+    } else {
+       websim.tts.stop();
+    }
+}
+
 async function init() {
     try {
         const [project, user] = await Promise.all([
@@ -143,6 +167,7 @@ async function init() {
         await generateAICommentary(); // Initial commentary
 
         elements.submitButton.addEventListener('click', handleSubmitComment);
+        elements.ttsToggleButton.addEventListener('click', handleToggleMute);
         window.websim.addEventListener('comment:created', handleNewComment);
 
     } catch (error) {
@@ -152,4 +177,3 @@ async function init() {
 }
 
 init();
-

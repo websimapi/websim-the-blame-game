@@ -59,6 +59,35 @@ header h1 {
     flex-shrink: 0;
 }
 
+.ai-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.ai-header h2 {
+    margin: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.tts-button {
+    background: none;
+    border: 1px solid var(--accent-color);
+    color: var(--text-color);
+    cursor: pointer;
+    border-radius: 5px;
+    font-size: 1.2em;
+    padding: 2px 8px;
+    transition: background-color 0.2s;
+}
+
+.tts-button:hover {
+    background-color: var(--accent-color);
+    color: var(--primary-color);
+}
+
 #ai-section h2 {
     color: var(--accent-color);
     border-bottom: 1px solid var(--secondary-color);
@@ -248,4 +277,3 @@ header h1 {
         min-height: 60px;
     }
 }
-
