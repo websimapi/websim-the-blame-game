@@ -1,0 +1,5 @@
+    const commentsResponse = await fetch(`/api/v1/projects/${state.projectId}/comments?last=10`);
+    const commentsData = await commentsResponse.json();
+    const recentComments = commentsData.comments.data.map(c => `${c.comment.author.username}: ${c.comment.raw_content}`).join('\n');
+    
+
