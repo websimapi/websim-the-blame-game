@@ -36,7 +36,7 @@ async function updateAITerminal(prompt) {
         const completion = await websim.chat.completions.create({
             messages: [
                 { role: "system", content: AI_SYSTEM_PROMPT },
-                { role: "user", content: prompt }
+                { role: "user", content: [{ type: "text", text: prompt }] }
             ],
             max_tokens: 80, // A little more room for creativity, still concise.
         });
